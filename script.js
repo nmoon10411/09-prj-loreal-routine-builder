@@ -68,7 +68,9 @@ generateBtn.addEventListener("click", async () => {
 
   const productNames = selectedProducts.map((p) => `${p.name} (${p.brand})`).join(" • ");
 
-  chatWindow.innerHTML += `<p><strong>You:</strong> Generate a routine using these products: ${productNames}</p>`;
+chatWindow.innerHTML = `
+  <p><strong>You:</strong> Generate a routine using these products: ${productNames.join(" · ")}</p>
+`;
 
   const response = await fetch("https://loreal-bot.nmoon10411.workers.dev/", {
     method: "POST",
