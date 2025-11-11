@@ -87,7 +87,8 @@ chatWindow.innerHTML = `
   });
 
   const data = await response.json();
-  chatWindow.innerHTML += `<p><strong>Advisor:</strong> ${data.reply}</p>`;
+chatWindow.innerHTML += `<p><strong>Advisor:</strong><br>${data.reply.replace(/\n/g, "<br>")}</p>`;
+chatWindow.scrollTop = chatWindow.scrollHeight;
 });
 
 /* Chat box text message send */
