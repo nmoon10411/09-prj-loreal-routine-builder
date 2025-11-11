@@ -1,4 +1,4 @@
-/* DOM references */
+/* DOM Elements */
 const categoryFilter = document.getElementById("categoryFilter");
 const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
@@ -7,91 +7,89 @@ const chatWindow = document.getElementById("chatWindow");
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 
-/* Store selected products */
+let allProducts = [];
 let selectedProducts = [];
 
-/* Load products */
+/* Load products.json */
 async function loadProducts() {
   const response = await fetch("products.json");
   const data = await response.json();
-  return data.products;
+  allProducts = data.products;
 }
 
-/* Display product cards and enable click-to-select */
-function displayProducts(products) {
-  productsContainer.innerHTML = products
-    .map(
-      (product, index) => `
-    <div class="product-card" data-index="${index}">
+/* Display product cards */
+function displayProducts(category) {
+  const filtered = allProducts.filter(p => p.category === category);
+  productsContainer.innerHTML = filtered.map(product => `
+    <div class="product-card" onclick="toggleSelect(${product.id})">
       <img src="${product.image}" alt="${product.name}">
       <div class="product-info">
         <h3>${product.name}</h3>
         <p>${product.brand}</p>
       </div>
-    </div>`
-    )
-    .join("");
-
-  /* Add click event to each card */
-  document.querySelectorAll(".product-card").forEach((card, index) => {
-    card.addEventListener("click", () => {
-      if (!selectedProducts.includes(products[index])) {
-        selectedProducts.push(products[index]);
-        updateSelectedProductsUI();
-      }
-    });
-  });
+    </div>
+  `).join("");
 }
 
-/* Update selected product list UI */
-function updateSelectedProductsUI() {
-  selectedProductsList.innerHTML = selectedProducts
-    .map((p) => `<span>${p.name}</span>`)
-    .join(" ");
+/* Add/Remove selected products */
+window.toggleSelect = function(id) {
+  const product = allProducts.find(p => p.id === id);
+  if (!product) return;
+
+  const exists = selectedProducts.find(p => p.id === id);
+  if (exists) {
+    selectedProducts = selectedProducts.filter(p => p.id !== id);
+  } else {
+    selectedProducts.push(product);
+  }
+
+  updateSelectedList();
+};
+
+/* Update Selected Products Display */
+function updateSelectedList() {
+  selectedProductsList.textContent = selectedProducts
+    .map(p => p.name)
+    .join("   ");
 }
 
-/* Filter on category change */
-categoryFilter.addEventListener("change", async (e) => {
-  const products = await loadProducts();
-  const filtered = products.filter(
-    (product) => product.category === e.target.value
-  );
-  displayProducts(filtered);
-});
-
-/* Send selected products to AI routine generator */
+/* Generate Routine (AI request) */
 generateBtn.addEventListener("click", async () => {
   if (selectedProducts.length === 0) {
-    chatWindow.innerHTML += `<p><strong>System:</strong> Please select at least one product.</p>`;
+    chatWindow.innerHTML = `<p><strong>System:</strong> Please select at least one product.</p>`;
     return;
   }
 
-  const productNames = selectedProducts.map((p) => `${p.name} (${p.brand})`).join(" • ");
+  const productNames = selectedProducts.map(p => `${p.name} (${p.brand})`);
 
-chatWindow.innerHTML = `
-  <p><strong>You:</strong> Generate a routine using these products: ${productNames.join(" · ")}</p>
-`;
+  // Clear old messages and show current request
+  chatWindow.innerHTML = `
+    <p><strong>You:</strong> Create a routine using these products: ${productNames.join(" · ")}</p>
+  `;
 
-  const response = await fetch("https://loreal-bot.nmoon10411.workers.dev/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messages: [
-        {
-          role: "user",
-          content:
-            `Create a friendly skincare or beauty routine using these products:\n${productNames}\nExplain step-by-step how to use them and why.`
-        }
-      ]
-    })
-  });
+  try {
+    const response = await fetch(window.WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          { role: "system", content: "You are a skincare and beauty routine expert." },
+          { role: "user", content: `Create a skincare routine using: ${productNames.join(", ")}. Explain when to use each product and why.` }
+        ]
+      })
+    });
 
-  const data = await response.json();
-chatWindow.innerHTML += `<p><strong>Advisor:</strong><br>${data.reply.replace(/\n/g, "<br>")}</p>`;
-chatWindow.scrollTop = chatWindow.scrollHeight;
+    const data = await response.json();
+
+    chatWindow.innerHTML += `<p><strong>Advisor:</strong><br>${data.reply.replace(/\n/g, "<br>")}</p>`;
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+  } catch (error) {
+    chatWindow.innerHTML += `<p><strong>System:</strong> Network error — please try again.</p>`;
+  }
 });
 
-/* Chat box text message send */
+/* Chat box manual messaging */
 chatForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const message = userInput.value.trim();
@@ -100,14 +98,22 @@ chatForm.addEventListener("submit", async (e) => {
   chatWindow.innerHTML += `<p><strong>You:</strong> ${message}</p>`;
   userInput.value = "";
 
-  const response = await fetch("https://loreal-bot.nmoon10411.workers.dev/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messages: [{ role: "user", content: message }]
-    })
-  });
-
-  const data = await response.json();
-  chatWindow.innerHTML += `<p><strong>Advisor:</strong> ${data.reply}</p>`;
+  try {
+    const response = await fetch(window.WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: message }]
+      })
+    });
+    const data = await response.json();
+    chatWindow.innerHTML += `<p><strong>Advisor:</strong><br>${data.reply.replace(/\n/g, "<br>")}</p>`;
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+  } catch {
+    chatWindow.innerHTML += `<p><strong>System:</strong> Network error.</p>`;
+  }
 });
+
+/* Load + Initialize */
+loadProducts();
+categoryFilter.addEventListener("change", (e) => displayProducts(e.target.value));
