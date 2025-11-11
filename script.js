@@ -1,255 +1,292 @@
-/* —— basic reset —— */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* =========================
+   DOM ELEMENTS
+========================= */
+const categoryFilter = document.getElementById("categoryFilter");
+const productsContainer = document.getElementById("productsContainer");
+const selectedProductsList = document.getElementById("selectedProductsList");
+const generateBtn = document.getElementById("generateRoutine");
+const chatForm = document.getElementById("chatForm");
+const chatWindow = document.getElementById("chatWindow");
+const userInput = document.getElementById("userInput");
+
+/* Worker endpoint (no API key in browser) */
+const WORKER_URL = (window.WORKER_URL || "").trim();
+
+/* =========================
+   STATE
+========================= */
+let allProducts = [];
+// Map of id -> product
+let selected = new Map();
+// Chat history that we send to the Worker
+let chatHistory = [
+  {
+    role: "system",
+    content:
+      "You are L'Oréal's helpful routine advisor. Stay on skincare, haircare, makeup, fragrance. " +
+      "Prioritize the user's selected products first. If selections are unsuitable, offer close L'Oréal alternatives. " +
+      "Explain routines step-by-step (AM/PM when relevant), short but specific. Avoid medical claims.",
+  },
+];
+
+/* =========================
+   UTILITIES
+========================= */
+
+function saveSelection() {
+  localStorage.setItem(
+    "selectedProducts@loreal",
+    JSON.stringify(Array.from(selected.keys()))
+  );
 }
 
-/* —— body + fonts —— */
-body {
-  font-family: "Montserrat", Arial, Helvetica, sans-serif;
-  color: #333;
-  display: flex;
-  justify-content: center;
+function loadSavedSelection() {
+  try {
+    const raw = localStorage.getItem("selectedProducts@loreal");
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
 }
 
-.page-wrapper {
-  width: 90%;
-  max-width: 900px;
+function addMessage(sender, text) {
+  const p = document.createElement("p");
+  p.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  chatWindow.appendChild(p);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/* header */
-.site-header {
-  text-align: center;
-  padding-top: 50px;
-  padding-bottom: 10px;
+/* Visually mark selection without needing extra CSS file changes */
+function markCardSelected(card, isSelected) {
+  if (isSelected) {
+    card.style.border = "2px solid #e3a535";
+    card.style.boxShadow = "0 0 0 3px rgba(227,165,53,0.15)";
+  } else {
+    card.style.border = "1px solid #ccc";
+    card.style.boxShadow = "none";
+  }
 }
 
-.logo {
-  width: 250px;
-  margin-bottom: 15px;
+/* Render the chips of selected products */
+function renderSelectedList() {
+  selectedProductsList.innerHTML = "";
+  if (selected.size === 0) return;
+
+  selected.forEach((product, id) => {
+    const chip = document.createElement("div");
+    chip.style.display = "inline-flex";
+    chip.style.alignItems = "center";
+    chip.style.gap = "8px";
+    chip.style.padding = "8px 10px";
+    chip.style.border = "1px solid #ddd";
+    chip.style.borderRadius = "999px";
+    chip.style.fontSize = "14px";
+    chip.style.background = "#fafafa";
+
+    chip.innerHTML = `
+      <span>${product.name}</span>
+      <button aria-label="Remove ${product.name}" data-id="${id}" style="
+        border:none;background:#000;color:#fff;width:22px;height:22px;
+        border-radius:50%;cursor:pointer;line-height:0;display:flex;align-items:center;justify-content:center;
+      ">&times;</button>
+    `;
+
+    chip.querySelector("button").addEventListener("click", () => {
+      selected.delete(id);
+      saveSelection();
+      // De-highlight card if it exists in current grid
+      const card = productsContainer.querySelector(`[data-id="${id}"]`);
+      if (card) markCardSelected(card, false);
+      renderSelectedList();
+    });
+
+    selectedProductsList.appendChild(chip);
+  });
 }
 
-.site-title {
-  font-size: 22px;
-  font-weight: 500;
-  margin-bottom: 10px;
+/* =========================
+   PRODUCTS: LOAD + RENDER
+========================= */
+
+async function loadProducts() {
+  const res = await fetch("products.json");
+  const json = await res.json();
+  return json.products;
 }
 
-/* category filter */
-.search-section {
-  margin: 30px 0;
-  display: flex;
+/* Build a single card HTML string */
+function productCardHTML(product) {
+  return `
+    <div class="product-card" data-id="${product.id}" style="position:relative;cursor:pointer;">
+      <img src="${product.image}" alt="${product.name}">
+      <div class="product-info">
+        <h3>${product.name}</h3>
+        <p>${product.brand}</p>
+        <button class="desc-toggle" type="button" style="
+          margin-top:8px;align-self:flex-start;border:1px solid #ccc;
+          padding:6px 10px;font-size:12px;border-radius:6px;background:#fff;cursor:pointer;
+        ">Description</button>
+        <div class="desc" hidden style="
+          margin-top:8px;font-size:13px;color:#444;line-height:1.4;background:#f8f8f8;
+          border:1px solid #eee;border-radius:6px;padding:10px;
+        ">${product.description}</div>
+      </div>
+    </div>
+  `;
 }
 
-.search-section select {
-  width: 100%;
-  padding: 16px;
-  font-size: 18px;
-  border: 2px solid #000;
-  border-radius: 8px;
-  cursor: pointer;
-  background-color: white;
-  font-weight: 500;
+function displayProducts(products) {
+  productsContainer.innerHTML = products.map(productCardHTML).join("");
+
+  // Wire up selection & description toggles
+  products.forEach((p) => {
+    const card = productsContainer.querySelector(`[data-id="${p.id}"]`);
+    const toggleBtn = card.querySelector(".desc-toggle");
+    const desc = card.querySelector(".desc");
+
+    // Restore visual selection state
+    markCardSelected(card, selected.has(p.id));
+
+    // Toggle description (don’t trigger select)
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = desc.hasAttribute("hidden");
+      if (isHidden) desc.removeAttribute("hidden");
+      else desc.setAttribute("hidden", "");
+    });
+
+    // Toggle selection by clicking the card area
+    card.addEventListener("click", () => {
+      if (selected.has(p.id)) {
+        selected.delete(p.id);
+        markCardSelected(card, false);
+      } else {
+        selected.set(p.id, p);
+        markCardSelected(card, true);
+      }
+      saveSelection();
+      renderSelectedList();
+    });
+  });
 }
 
-.search-section select:focus {
-  outline: none;
-  border-color: #666;
+/* Initial placeholder */
+productsContainer.innerHTML = `
+  <div class="placeholder-message">Select a category to view products</div>
+`;
+
+/* Category filter */
+categoryFilter.addEventListener("change", async (e) => {
+  const selectedCategory = e.target.value;
+  if (allProducts.length === 0) {
+    allProducts = await loadProducts();
+    // Restore saved selections once we have the full list
+    const savedIds = loadSavedSelection();
+    savedIds.forEach((id) => {
+      const prod = allProducts.find((p) => p.id === id);
+      if (prod) selected.set(id, prod);
+    });
+    renderSelectedList();
+  }
+  const filtered = allProducts.filter((p) => p.category === selectedCategory);
+  displayProducts(filtered);
+});
+
+/* =========================
+   ROUTINE GENERATION + CHAT
+========================= */
+
+async function sendToWorker(messages) {
+  if (!WORKER_URL) {
+    throw new Error(
+      "Worker URL not set. Define window.WORKER_URL in secrets.js (or inline) to your Cloudflare Worker endpoint."
+    );
+  }
+  const res = await fetch(WORKER_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Worker error (${res.status}): ${text || "Unknown error"}`);
+  }
+  const data = await res.json();
+  return data.reply || "Sorry, I couldn’t process that.";
 }
 
-/* chat section */
-.chatbox {
-  margin: 40px 0;
-  border: 2px solid #000;
-  border-radius: 8px;
-  padding: 26px;
-}
+/* Generate routine using selected products */
+generateBtn.addEventListener("click", async () => {
+  if (selected.size === 0) {
+    addMessage("Advisor", "Please select one or more products first.");
+    return;
+  }
 
-.chatbox h2 {
-  font-size: 20px;
-  margin-bottom: 20px;
-}
+  // Build a concise product summary for the model
+  const payload = Array.from(selected.values()).map((p) => ({
+    id: p.id,
+    brand: p.brand,
+    name: p.name,
+    category: p.category,
+    description: p.description,
+  }));
 
-.chat-window {
-  padding: 20px;
-  font-size: 18px;
-  line-height: 1.5;
-  height: 250px;
-  overflow-y: auto;
-  background: #fafafa;
-  margin-bottom: 20px;
-}
+  addMessage("You", "Generate a routine for my selected products.");
+  addMessage("Advisor", "Working on your routine…");
 
-/* placeholder message */
-.placeholder-message {
-  width: 100%;
-  text-align: center;
-  padding: 40px;
-  color: #666;
-  font-size: 18px;
-}
+  chatHistory.push({
+    role: "user",
+    content:
+      "Use ONLY these selected products if possible. If a crucial step is missing, suggest a close L'Oréal alternative:\n\n" +
+      JSON.stringify(payload, null, 2),
+  });
 
-/* input row */
-.chat-form {
-  display: flex;
-  gap: 12px;
-  margin-top: 16px;
-}
+  try {
+    const reply = await sendToWorker(chatHistory);
+    addMessage("Advisor", reply);
+    chatHistory.push({ role: "assistant", content: reply });
+  } catch (err) {
+    addMessage("Advisor", "Network error — please try again.");
+    console.error(err);
+  }
+});
 
-.chat-form input {
-  flex: 1;
-  padding: 12px;
-  font-size: 18px;
-  border: none;
-  border-bottom: 2px solid #ccc;
-  background: transparent;
-}
+/* Follow-up questions */
+chatForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = userInput.value.trim();
+  if (!msg) return;
 
-.chat-form input:focus {
-  outline: none;
-  border-bottom-color: #000;
-}
+  addMessage("You", msg);
+  userInput.value = "";
 
-.chat-form button {
-  font-size: 18px;
-  background: #000;
-  color: #fff;
-  border: none;
-  padding: 12px;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.3s;
-}
+  chatHistory.push({ role: "user", content: msg });
 
-.chat-form button:hover {
-  background: #666666;
-}
+  try {
+    const reply = await sendToWorker(chatHistory);
+    addMessage("Advisor", reply);
+    chatHistory.push({ role: "assistant", content: reply });
+  } catch (err) {
+    addMessage("Advisor", "Network error — please try again.");
+    console.error(err);
+  }
+});
 
-.chat-form button:focus {
-  outline: 2px solid #000;
-  outline-offset: 2px;
-}
-
-/* visually hidden */
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* footer */
-.site-footer {
-  margin: 60px 0 40px;
-  text-align: center;
-  font-size: 14px;
-  color: #666;
-}
-
-.site-footer nav {
-  margin-top: 12px;
-}
-
-.site-footer a {
-  margin: 0 8px;
-  color: #000;
-  text-decoration: none;
-}
-
-.site-footer a:hover {
-  color: #666666;
-}
-
-/* products grid */
-.products-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  margin: 30px 0;
-}
-
-.product-card {
-  flex: 0 1 calc(33.333% - 14px);
-  border: 1px solid #ccc;
-  padding: 15px;
-  border-radius: 4px;
-  display: flex;
-  gap: 15px;
-  min-height: 160px;
-}
-
-.product-card img {
-  width: 110px;
-  height: 110px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.product-card .product-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 110px;
-}
-
-.product-card h3 {
-  font-size: 16px;
-  margin-bottom: 8px;
-}
-
-.product-card p {
-  font-size: 14px;
-  color: #666;
-}
-
-/* selected products */
-.selected-products {
-  margin: 40px 0;
-  padding: 20px;
-  border: 2px solid #000;
-  border-radius: 8px;
-}
-
-.selected-products h2 {
-  font-size: 20px;
-  margin-bottom: 20px;
-}
-
-#selectedProductsList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.generate-btn {
-  width: 100%;
-  margin-top: 20px;
-  padding: 16px;
-  font-size: 18px;
-  font-weight: 500;
-  color: #fff;
-  background: #000;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-
-.generate-btn:hover {
-  background: #666;
-}
-
-.generate-btn i {
-  margin-right: 8px;
-}
+/* =========================
+   FIRST LOAD: pre-warm data (optional)
+========================= */
+(async function bootstrap() {
+  // Preload products so saved selections can render as soon as user picks a category
+  try {
+    allProducts = await loadProducts();
+    const savedIds = loadSavedSelection();
+    savedIds.forEach((id) => {
+      const prod = allProducts.find((p) => p.id === id);
+      if (prod) selected.set(id, prod);
+    });
+    renderSelectedList();
+  } catch (e) {
+    console.warn("Could not preload products.json:", e);
+  }
+})();
