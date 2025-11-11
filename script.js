@@ -1,57 +1,255 @@
-/* Get references to DOM elements */
-const categoryFilter = document.getElementById("categoryFilter");
-const productsContainer = document.getElementById("productsContainer");
-const chatForm = document.getElementById("chatForm");
-const chatWindow = document.getElementById("chatWindow");
-
-/* Show initial placeholder until user selects a category */
-productsContainer.innerHTML = `
-  <div class="placeholder-message">
-    Select a category to view products
-  </div>
-`;
-
-/* Load product data from JSON file */
-async function loadProducts() {
-  const response = await fetch("products.json");
-  const data = await response.json();
-  return data.products;
+/* —— basic reset —— */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* Create HTML for displaying product cards */
-function displayProducts(products) {
-  productsContainer.innerHTML = products
-    .map(
-      (product) => `
-    <div class="product-card">
-      <img src="${product.image}" alt="${product.name}">
-      <div class="product-info">
-        <h3>${product.name}</h3>
-        <p>${product.brand}</p>
-      </div>
-    </div>
-  `
-    )
-    .join("");
+/* —— body + fonts —— */
+body {
+  font-family: "Montserrat", Arial, Helvetica, sans-serif;
+  color: #333;
+  display: flex;
+  justify-content: center;
 }
 
-/* Filter and display products when category changes */
-categoryFilter.addEventListener("change", async (e) => {
-  const products = await loadProducts();
-  const selectedCategory = e.target.value;
+.page-wrapper {
+  width: 90%;
+  max-width: 900px;
+}
 
-  /* filter() creates a new array containing only products 
-     where the category matches what the user selected */
-  const filteredProducts = products.filter(
-    (product) => product.category === selectedCategory
-  );
+/* header */
+.site-header {
+  text-align: center;
+  padding-top: 50px;
+  padding-bottom: 10px;
+}
 
-  displayProducts(filteredProducts);
-});
+.logo {
+  width: 250px;
+  margin-bottom: 15px;
+}
 
-/* Chat form submission handler - placeholder for OpenAI integration */
-chatForm.addEventListener("submit", (e) => {
-  e.preventDefault();
+.site-title {
+  font-size: 22px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
 
-  chatWindow.innerHTML = "Connect to the OpenAI API for a response!";
-});
+/* category filter */
+.search-section {
+  margin: 30px 0;
+  display: flex;
+}
+
+.search-section select {
+  width: 100%;
+  padding: 16px;
+  font-size: 18px;
+  border: 2px solid #000;
+  border-radius: 8px;
+  cursor: pointer;
+  background-color: white;
+  font-weight: 500;
+}
+
+.search-section select:focus {
+  outline: none;
+  border-color: #666;
+}
+
+/* chat section */
+.chatbox {
+  margin: 40px 0;
+  border: 2px solid #000;
+  border-radius: 8px;
+  padding: 26px;
+}
+
+.chatbox h2 {
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+
+.chat-window {
+  padding: 20px;
+  font-size: 18px;
+  line-height: 1.5;
+  height: 250px;
+  overflow-y: auto;
+  background: #fafafa;
+  margin-bottom: 20px;
+}
+
+/* placeholder message */
+.placeholder-message {
+  width: 100%;
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 18px;
+}
+
+/* input row */
+.chat-form {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.chat-form input {
+  flex: 1;
+  padding: 12px;
+  font-size: 18px;
+  border: none;
+  border-bottom: 2px solid #ccc;
+  background: transparent;
+}
+
+.chat-form input:focus {
+  outline: none;
+  border-bottom-color: #000;
+}
+
+.chat-form button {
+  font-size: 18px;
+  background: #000;
+  color: #fff;
+  border: none;
+  padding: 12px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.chat-form button:hover {
+  background: #666666;
+}
+
+.chat-form button:focus {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+/* visually hidden */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* footer */
+.site-footer {
+  margin: 60px 0 40px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.site-footer nav {
+  margin-top: 12px;
+}
+
+.site-footer a {
+  margin: 0 8px;
+  color: #000;
+  text-decoration: none;
+}
+
+.site-footer a:hover {
+  color: #666666;
+}
+
+/* products grid */
+.products-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin: 30px 0;
+}
+
+.product-card {
+  flex: 0 1 calc(33.333% - 14px);
+  border: 1px solid #ccc;
+  padding: 15px;
+  border-radius: 4px;
+  display: flex;
+  gap: 15px;
+  min-height: 160px;
+}
+
+.product-card img {
+  width: 110px;
+  height: 110px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.product-card .product-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 110px;
+}
+
+.product-card h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.product-card p {
+  font-size: 14px;
+  color: #666;
+}
+
+/* selected products */
+.selected-products {
+  margin: 40px 0;
+  padding: 20px;
+  border: 2px solid #000;
+  border-radius: 8px;
+}
+
+.selected-products h2 {
+  font-size: 20px;
+  margin-bottom: 20px;
+}
+
+#selectedProductsList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.generate-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 16px;
+  font-size: 18px;
+  font-weight: 500;
+  color: #fff;
+  background: #000;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.generate-btn:hover {
+  background: #666;
+}
+
+.generate-btn i {
+  margin-right: 8px;
+}
