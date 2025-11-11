@@ -1,176 +1,123 @@
-/* ==============================
-   GLOBAL STATE
-============================== */
-let allProducts = [];
-let selectedProducts = JSON.parse(localStorage.getItem("selectedProducts")) || [];
-let chatHistory = [];
-
-/* DOM Elements */
 const categoryFilter = document.getElementById("categoryFilter");
 const productsContainer = document.getElementById("productsContainer");
 const selectedProductsList = document.getElementById("selectedProductsList");
-const generateRoutineBtn = document.getElementById("generateRoutine");
+const generateBtn = document.getElementById("generateRoutine");
 const chatWindow = document.getElementById("chatWindow");
 const chatForm = document.getElementById("chatForm");
 const userInput = document.getElementById("userInput");
 
-/* ==============================
-   LOAD PRODUCT DATA
-============================== */
+const WORKER_URL = "https://loreal-bot.nmoon10411.workers.dev/";
+
+let allProducts = [];
+let selectedProducts = JSON.parse(localStorage.getItem("selectedProducts")) || [];
+let chatHistory = [];
+
+// Load products
 async function loadProducts() {
-  const response = await fetch("products.json");
-  const data = await response.json();
+  const res = await fetch("products.json");
+  const data = await res.json();
   allProducts = data.products;
 }
 
-/* ==============================
-   DISPLAY PRODUCTS
-============================== */
+// Display products
 function displayProducts(products) {
-  productsContainer.innerHTML = products
-    .map(
-      (product) => `
-      <div class="product-card" data-id="${product.id}">
-        <img src="${product.image}" alt="${product.name}">
-        <div class="product-info">
-          <h3>${product.name}</h3>
-          <p>${product.brand}</p>
-        </div>
+  productsContainer.innerHTML = products.map(product => `
+    <div class="product-card" data-id="${product.id}">
+      <img src="${product.image}" alt="${product.name}">
+      <div class="product-info">
+        <h3>${product.name}</h3>
+        <p>${product.brand}</p>
       </div>
-  `
-    )
-    .join("");
+    </div>
+  `).join("");
 
-  /* Add selection behavior */
-  document.querySelectorAll(".product-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const id = parseInt(card.dataset.id);
-      toggleProductSelection(id);
-    });
+  document.querySelectorAll(".product-card").forEach(card => {
+    card.addEventListener("click", () => toggleProduct(card.dataset.id));
   });
 }
 
-/* ==============================
-   TOGGLE SELECTED PRODUCTS
-============================== */
-function toggleProductSelection(productId) {
-  const existing = selectedProducts.find((p) => p.id === productId);
-
-  if (existing) {
-    selectedProducts = selectedProducts.filter((p) => p.id !== productId);
+// Toggle selection
+function toggleProduct(id) {
+  id = Number(id);
+  if (selectedProducts.includes(id)) {
+    selectedProducts = selectedProducts.filter(pid => pid !== id);
   } else {
-    const product = allProducts.find((p) => p.id === productId);
-    selectedProducts.push(product);
+    selectedProducts.push(id);
   }
-
   localStorage.setItem("selectedProducts", JSON.stringify(selectedProducts));
-  updateSelectedProductsUI();
+  showSelectedProducts();
 }
 
-/* ==============================
-   UPDATE SELECTED PRODUCTS AREA
-============================== */
-function updateSelectedProductsUI() {
-  selectedProductsList.innerHTML = selectedProducts
-    .map(
-      (p) => `
-      <div class="selected-tag">
-        ${p.name}
-        <button class="remove-tag" data-id="${p.id}">&times;</button>
-      </div>
-    `
-    )
-    .join("");
-
-  /* Remove Button Listener */
-  document.querySelectorAll(".remove-tag").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = parseInt(btn.dataset.id);
-      selectedProducts = selectedProducts.filter((p) => p.id !== id);
-      localStorage.setItem("selectedProducts", JSON.stringify(selectedProducts));
-      updateSelectedProductsUI();
-    });
-  });
+// Show selected products
+function showSelectedProducts() {
+  selectedProductsList.innerHTML = selectedProducts.map(id => {
+    const item = allProducts.find(p => p.id === id);
+    return `<span class="selected-item">${item.name}</span>`;
+  }).join("");
 }
 
-/* ==============================
-   APPEND MESSAGE TO CHAT
-============================== */
-function addChatMessage(sender, text) {
+// Filter by category
+categoryFilter.addEventListener("change", () => {
+  const filtered = allProducts.filter(p => p.category === categoryFilter.value);
+  displayProducts(filtered);
+});
+
+// Add chat message UI
+function addMessage(sender, text) {
   const msg = document.createElement("p");
   msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
   chatWindow.appendChild(msg);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-/* ==============================
-   GENERATE ROUTINE (AI CALL)
-============================== */
-async function generateRoutine() {
+// Generate Routine
+generateBtn.addEventListener("click", async () => {
   if (selectedProducts.length === 0) {
-    addChatMessage("System", "Please select at least one product.");
+    addMessage("System", "Please select at least one product.");
     return;
   }
 
-  addChatMessage("You", "Generate a routine for my selected products.");
-  const productData = selectedProducts.map((p) => ({
-    name: p.name,
-    brand: p.brand,
-    category: p.category,
-    description: p.description,
-  }));
+  const chosen = allProducts.filter(p => selectedProducts.includes(p.id));
 
-  chatHistory.push({ role: "user", content: `Create a skincare or haircare routine using these products: ${JSON.stringify(productData)}` });
+  chatHistory.push({ role: "user", content: `Create a skincare or beauty routine using these products: ${JSON.stringify(chosen)}` });
 
-  const response = await fetch(window.WORKER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: chatHistory })
-  });
-
-  const data = await response.json();
-  const reply = data.reply || "Sorry, I couldn't generate a routine.";
-  chatHistory.push({ role: "assistant", content: reply });
-  addChatMessage("Advisor", reply);
-}
-
-/* ==============================
-   CHAT FOLLOW-UP
-============================== */
-async function handleChat(event) {
-  event.preventDefault();
-  const message = userInput.value.trim();
-  if (!message) return;
-
-  addChatMessage("You", message);
-  userInput.value = "";
-  chatHistory.push({ role: "user", content: message });
-
-  const response = await fetch(window.WORKER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: chatHistory })
-  });
-
-  const data = await response.json();
-  const reply = data.reply || "Sorry, I didn’t understand that.";
-  chatHistory.push({ role: "assistant", content: reply });
-  addChatMessage("Advisor", reply);
-}
-
-/* ==============================
-   EVENT LISTENERS
-============================== */
-categoryFilter.addEventListener("change", () => {
-  const category = categoryFilter.value;
-  const filtered = allProducts.filter((p) => p.category === category);
-  displayProducts(filtered);
+  await sendToAI();
 });
 
-generateRoutineBtn.addEventListener("click", generateRoutine);
-chatForm.addEventListener("submit", handleChat);
+// Follow-up chat
+chatForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const message = userInput.value.trim();
+  if (!message) return;
+  
+  addMessage("You", message);
+  userInput.value = "";
 
-/* ==============================
-   INIT
-============================== */
-loadProducts().then(updateSelectedProductsUI);
+  chatHistory.push({ role: "user", content: message });
+  await sendToAI();
+});
+
+// Send request to Worker → OpenAI
+async function sendToAI() {
+  try {
+    const response = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: chatHistory })
+    });
+
+    const data = await response.json();
+    const reply = data.reply || "Sorry — I couldn’t process that.";
+
+    chatHistory.push({ role: "assistant", content: reply });
+    addMessage("Advisor", reply);
+  } catch (err) {
+    addMessage("System", "Network error — please try again.");
+  }
+}
+
+// Start
+(async () => {
+  await loadProducts();
+  showSelectedProducts();
+})();
