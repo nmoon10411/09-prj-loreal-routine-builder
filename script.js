@@ -36,7 +36,6 @@ function displayProducts(products) {
     )
     .join("");
 
-  /* Add click event to each card */
   document.querySelectorAll(".product-card").forEach((card, index) => {
     card.addEventListener("click", () => {
       if (!selectedProducts.includes(products[index])) {
@@ -66,7 +65,8 @@ categoryFilter.addEventListener("change", async (e) => {
 /* Send selected products to AI routine generator */
 generateBtn.addEventListener("click", async () => {
   if (selectedProducts.length === 0) {
-    chatWindow.innerHTML += `<p><strong>System:</strong> Please select at least one product.</p>`;
+    chatWindow.innerHTML += `
+      <div class="chat-bubble system">Please select at least one product.</div>`;
     return;
   }
 
@@ -74,7 +74,15 @@ generateBtn.addEventListener("click", async () => {
     .map((p) => `${p.name} (${p.brand})`)
     .join(" • ");
 
-  chatWindow.innerHTML += `<p><strong>You:</strong> Generate a routine using these products: ${productNames}</p>`;
+  // Display user’s request
+  chatWindow.innerHTML += `
+    <div class="chat-bubble user">
+      <strong>You:</strong> Generate a routine using these products: ${productNames}
+    </div>`;
+
+  // Temporary “thinking” bubble
+  chatWindow.innerHTML += `
+    <div id="loadingMessage" class="chat-bubble advisor"><em>Advisor is thinking...</em></div>`;
 
   try {
     const response = await fetch("https://loreal-bot.nmoon10411.workers.dev/", {
@@ -91,15 +99,21 @@ generateBtn.addEventListener("click", async () => {
     });
 
     const data = await response.json();
+    document.getElementById("loadingMessage")?.remove();
 
-    if (data && data.reply) {
-      chatWindow.innerHTML += `<p><strong>Advisor:</strong> ${data.reply}</p>`;
-    } else {
-      chatWindow.innerHTML += `<p><strong>Advisor:</strong> Sorry, I couldn’t process that request.</p>`;
-    }
+    chatWindow.innerHTML += `
+      <div class="chat-bubble advisor">
+        <strong>Advisor:</strong> ${data.reply || "Sorry, I couldn’t process that request."}
+      </div>`;
   } catch (error) {
-    chatWindow.innerHTML += `<p><strong>Advisor:</strong> Network error — please try again.</p>`;
+    document.getElementById("loadingMessage")?.remove();
+    chatWindow.innerHTML += `
+      <div class="chat-bubble advisor error">
+        <strong>Advisor:</strong> Network error — please try again.
+      </div>`;
   }
+
+  chatWindow.scrollTop = chatWindow.scrollHeight;
 });
 
 /* Chat box text message send */
@@ -109,8 +123,15 @@ chatForm.addEventListener("submit", async (e) => {
   if (!message) return;
 
   // Display user message
-  chatWindow.innerHTML += `<p><strong>You:</strong> ${message}</p>`;
+  chatWindow.innerHTML += `
+    <div class="chat-bubble user">
+      <strong>You:</strong> ${message}
+    </div>`;
   userInput.value = "";
+
+  // Temporary “thinking” bubble
+  chatWindow.innerHTML += `
+    <div id="loadingMessage" class="chat-bubble advisor"><em>Advisor is thinking...</em></div>`;
 
   try {
     const response = await fetch("https://loreal-bot.nmoon10411.workers.dev/", {
@@ -122,13 +143,19 @@ chatForm.addEventListener("submit", async (e) => {
     });
 
     const data = await response.json();
+    document.getElementById("loadingMessage")?.remove();
 
-    if (data && data.reply) {
-      chatWindow.innerHTML += `<p><strong>Advisor:</strong> ${data.reply}</p>`;
-    } else {
-      chatWindow.innerHTML += `<p><strong>Advisor:</strong> Sorry, I couldn’t process that request.</p>`;
-    }
+    chatWindow.innerHTML += `
+      <div class="chat-bubble advisor">
+        <strong>Advisor:</strong> ${data.reply || "Sorry, I couldn’t process that request."}
+      </div>`;
   } catch (error) {
-    chatWindow.innerHTML += `<p><strong>Advisor:</strong> Network error — please try again.</p>`;
+    document.getElementById("loadingMessage")?.remove();
+    chatWindow.innerHTML += `
+      <div class="chat-bubble advisor error">
+        <strong>Advisor:</strong> Network error — please try again.
+      </div>`;
   }
+
+  chatWindow.scrollTop = chatWindow.scrollHeight;
 });
